@@ -71,6 +71,9 @@ public class SettingsStorageDTO {
         globalConfigGroup.setElementList(Arrays.asList(new GlobalConfig("test", "abc"), new GlobalConfig("demo", "value")));
         storage.globalConfigGroupMap = new HashMap<>(16);
         storage.globalConfigGroupMap.put(GlobalDict.DEFAULT_GROUP_NAME, globalConfigGroup);
+        // MCP 默认开启，默认端口 28731
+        storage.mcpEnabled = true;
+        storage.mcpPort = 28731;
         return storage;
     }
 
@@ -160,6 +163,14 @@ public class SettingsStorageDTO {
      */
     @JsonProperty("globalConfig")
     private Map<String, GlobalConfigGroup> globalConfigGroupMap;
+    /**
+     * MCP 服务开关（null 视为开启，兼容旧版本配置）
+     */
+    private Boolean mcpEnabled;
+    /**
+     * MCP 服务端口（null 视为 28731，兼容旧版本配置）
+     */
+    private Integer mcpPort;
 
     public void fillDefaultVal() {
         SettingsStorageDTO defaultVal = defaultVal();
@@ -208,6 +219,12 @@ public class SettingsStorageDTO {
 
         if (StringUtils.isEmpty(this.version)) {
             this.setVersion(defaultVal.getVersion());
+        }
+        if (this.mcpEnabled == null) {
+            this.mcpEnabled = defaultVal.getMcpEnabled();
+        }
+        if (this.mcpPort == null) {
+            this.mcpPort = defaultVal.getMcpPort();
         }
     }
 }

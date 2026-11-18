@@ -2,9 +2,12 @@ package com.sjhy.plugin.tool;
 
 import com.sjhy.plugin.entity.GlobalConfig;
 import com.sjhy.plugin.entity.Template;
+import com.sjhy.plugin.entity.TemplateGroup;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Objects;
+import java.util.StringJoiner;
 
 /**
  * 模板工具，主要用于对模板进行预处理
@@ -90,5 +93,73 @@ public final class TemplateUtils {
         if (template != null) {
             addGlobalConfig(Collections.singleton(template));
         }
+    }
+
+    /**
+     * 在模板组内按名称查找模板
+     *
+     * @param templateGroup 模板组（可为 null）
+     * @param templateName  模板名称
+     * @return 首个名称匹配的模板，未找到返回 null
+     */
+    public static Template findTemplate(TemplateGroup templateGroup, String templateName) {
+        if (templateGroup == null || StringUtils.isEmpty(templateName) || CollectionUtil.isEmpty(templateGroup.getElementList())) {
+            return null;
+        }
+        for (Template template : templateGroup.getElementList()) {
+            if (template != null && Objects.equals(template.getName(), templateName)) {
+                return template;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 拼接模板组内可用模板名清单
+     *
+     * @param templateGroup 模板组（可为 null）
+     * @return 模板名清单（逗号分隔，无可用模板时为空串）
+     */
+    public static String getTemplateNames(TemplateGroup templateGroup) {
+        if (templateGroup == null || CollectionUtil.isEmpty(templateGroup.getElementList())) {
+            return "";
+        }
+        StringJoiner joiner = new StringJoiner(", ");
+        for (Template template : templateGroup.getElementList()) {
+            if (template != null && !StringUtils.isEmpty(template.getName())) {
+                joiner.add(template.getName());
+            }
+        }
+        return joiner.toString();
+    }
+
+    /**
+     * 拼接嵌套模板未找到的告警文案
+     *
+     * @param groupName    本次生成所用模板分组名
+     * @param templateGroup 模板组对象（可为 null 表示分组不存在）
+     * @param templateName 未找到的模板名
+     * @param tableName    当前表名（可为空）
+     * @return 告警文案
+     */
+    public static String getMissingTemplateMessage(String groupName, TemplateGroup templateGroup, String templateName, String tableName) {
+        StringBuilder builder = new StringBuilder("嵌套模板未生成：");
+        if (StringUtils.isEmpty(groupName)) {
+            builder.append("未确定模板分组");
+        } else if (templateGroup == null) {
+            builder.append("模板分组 ").append(groupName).append(" 不存在");
+        } else {
+            builder.append("模板分组 ").append(groupName).append(" 中找不到模板 ").append(templateName);
+        }
+        if (!StringUtils.isEmpty(tableName)) {
+            builder.append("（表 ").append(tableName).append("）");
+        }
+        String templateNames = getTemplateNames(templateGroup);
+        if (StringUtils.isEmpty(templateNames)) {
+            builder.append("，该分组无可用模板");
+        } else {
+            builder.append("，该分组可用模板: ").append(templateNames);
+        }
+        return builder.toString();
     }
 }

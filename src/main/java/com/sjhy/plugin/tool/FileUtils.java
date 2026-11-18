@@ -62,14 +62,34 @@ public class FileUtils {
      * @return 目录对象
      */
     public VirtualFile createChildDirectory(Project project, VirtualFile parent, String dirName) {
-        return WriteCommandAction.runWriteCommandAction(project, (Computable<VirtualFile>) () -> {
+        return createChildDirectory(project, parent, dirName, false);
+    }
+
+    /**
+     * 创建子目录
+     *
+     * @param project 文件对象
+     * @param parent  父级目录
+     * @param dirName 子目录
+     * @param silent  静默模式（失败不弹窗，只记日志）
+     * @return 目录对象
+     */
+    public VirtualFile createChildDirectory(Project project, VirtualFile parent, String dirName, boolean silent) {
+        // 弹窗必须在 write action 之外：write action 内派发窗口事件会被 IDEA 判非法（AWT events are not allowed inside write action）
+        String[] error = new String[1];
+        VirtualFile result = WriteCommandAction.runWriteCommandAction(project, (Computable<VirtualFile>) () -> {
             try {
                 return VfsUtil.createDirectoryIfMissing(parent, dirName);
             } catch (IOException e) {
-                Messages.showWarningDialog("目录创建失败：" + dirName, GlobalDict.TITLE_INFO);
+                LOG.warn("目录创建失败：" + dirName, e);
+                error[0] = "目录创建失败：" + dirName;
                 return null;
             }
         });
+        if (error[0] != null && !silent) {
+            Messages.showWarningDialog(error[0], GlobalDict.TITLE_INFO);
+        }
+        return result;
     }
 
     /**
@@ -81,7 +101,22 @@ public class FileUtils {
      * @return 文件对象
      */
     public VirtualFile createChildFile(Project project, VirtualFile parent, String fileName) {
-        return WriteCommandAction.runWriteCommandAction(project, (Computable<VirtualFile>) () -> {
+        return createChildFile(project, parent, fileName, false);
+    }
+
+    /**
+     * 创建子文件（静默模式：失败不弹窗，只记日志）
+     *
+     * @param project 项目对象
+     * @param parent  父级目录
+     * @param fileName 子文件名
+     * @param silent  静默模式
+     * @return 文件对象
+     */
+    public VirtualFile createChildFile(Project project, VirtualFile parent, String fileName, boolean silent) {
+        // 弹窗必须在 write action 之外：write action 内派发窗口事件会被 IDEA 判非法（AWT events are not allowed inside write action）
+        String[] error = new String[1];
+        VirtualFile result = WriteCommandAction.runWriteCommandAction(project, (Computable<VirtualFile>) () -> {
             PsiManager psiManager = PsiManager.getInstance(project);
             try {
                 PsiDirectory directory = psiManager.findDirectory(parent);
@@ -91,10 +126,15 @@ public class FileUtils {
                 }
                 return parent.createChildData(new Object(), fileName);
             } catch (IOException e) {
-                Messages.showWarningDialog("文件创建失败：" + fileName, GlobalDict.TITLE_INFO);
+                LOG.warn("文件创建失败：" + fileName, e);
+                error[0] = "文件创建失败：" + fileName;
                 return null;
             }
         });
+        if (error[0] != null && !silent) {
+            Messages.showWarningDialog(error[0], GlobalDict.TITLE_INFO);
+        }
+        return result;
     }
 
     /**

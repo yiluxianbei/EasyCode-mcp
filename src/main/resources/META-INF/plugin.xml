@@ -299,7 +299,14 @@
         <projectService serviceInterface="com.sjhy.plugin.service.CodeGenerateService" serviceImplementation="com.sjhy.plugin.service.impl.CodeGenerateServiceImpl"/>
         <!--系统设置面板-->
         <applicationConfigurable dynamic="true" instance="com.sjhy.plugin.ui.MainSettingForm"/>
+        <!--MCP 服务（内嵌 HTTP MCP 端点，应用级单例，随 IDE 启动）-->
+        <applicationService serviceImplementation="com.sjhy.plugin.mcp.McpServerService"/>
     </extensions>
+
+    <!--MCP 服务启动监听：主窗口创建时触发服务实例化（幂等，启动失败不影响 IDE）-->
+    <applicationListeners>
+        <listener class="com.sjhy.plugin.mcp.McpAppLifecycleListener" topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
 
     <actions>
         <!-- Add your actions here -->

@@ -20,6 +20,8 @@ import com.sjhy.plugin.service.CodeGenerateService;
 import com.sjhy.plugin.service.SettingsStorageService;
 import com.sjhy.plugin.service.TableInfoSettingsService;
 import com.sjhy.plugin.tool.*;
+import com.sjhy.plugin.entity.FileWriteResult;
+import com.sjhy.plugin.entity.SaveResult;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -66,6 +68,19 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
      */
     @Override
     public void generate(Collection<Template> templates, GenerateOptions generateOptions) {
+        // UI 调用方不关心逐文件写入结果，忽略返回值
+        generateWithResults(templates, generateOptions);
+    }
+
+    /**
+     * 生成代码，并返回逐文件写入结果
+     *
+     * @param templates       模板
+     * @param generateOptions 生成选项
+     * @return 逐文件写入结果列表
+     */
+    @Override
+    public List<FileWriteResult> generateWithResults(Collection<Template> templates, GenerateOptions generateOptions) {
         // 获取选中表信息
         TableInfo selectedTableInfo;
         List<TableInfo> tableInfoList;
@@ -78,6 +93,10 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
         }
         // 校验选中表的保存路径是否正确
         if (StringUtils.isEmpty(selectedTableInfo.getSavePath())) {
+            // 预览模式不弹窗，直接跳过生成
+            if (Boolean.TRUE.equals(generateOptions.getPreviewMode())) {
+                return new ArrayList<>();
+            }
             if (selectedTableInfo.getObj() != null) {
                 Messages.showInfoMessage(selectedTableInfo.getObj().getName() + "表配置信息不正确，请尝试重新配置", GlobalDict.TITLE_INFO);
             } else if (selectedTableInfo.getPsiClassObj() != null) {
@@ -86,9 +105,10 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
             } else {
                 Messages.showInfoMessage("配置信息不正确，请尝试重新配置", GlobalDict.TITLE_INFO);
             }
-            return;
+            return new ArrayList<>();
         }
-        // 将未配置的表进行配置覆盖
+        // 将未配置的表进行配置覆盖（预览模式仅内存生效，不持久化表配置）
+        boolean previewMode = Boolean.TRUE.equals(generateOptions.getPreviewMode());
         TableInfo finalSelectedTableInfo = selectedTableInfo;
         tableInfoList.forEach(tableInfo -> {
             if (StringUtils.isEmpty(tableInfo.getSavePath())) {
@@ -96,7 +116,9 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
                 tableInfo.setSavePackageName(finalSelectedTableInfo.getSavePackageName());
                 tableInfo.setSavePath(finalSelectedTableInfo.getSavePath());
                 tableInfo.setPreName(finalSelectedTableInfo.getPreName());
-                tableInfoService.saveTableInfo(tableInfo);
+                if (!previewMode) {
+                    tableInfoService.saveTableInfo(tableInfo);
+                }
             }
         });
         // 如果使用统一配置，直接全部覆盖
@@ -110,7 +132,7 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
         }
 
         // 生成代码
-        generate(templates, tableInfoList, generateOptions, null);
+        return generate(templates, tableInfoList, generateOptions, null);
     }
 
     /**
@@ -120,15 +142,19 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
      * @param tableInfoList   表信息对象
      * @param generateOptions 生成配置
      * @param otherParam      其他参数
+     * @return 逐文件写入结果列表
      */
-    public void generate(Collection<Template> templates, Collection<TableInfo> tableInfoList, GenerateOptions generateOptions, Map<String, Object> otherParam) {
+    public List<FileWriteResult> generate(Collection<Template> templates, Collection<TableInfo> tableInfoList, GenerateOptions generateOptions, Map<String, Object> otherParam) {
+        List<FileWriteResult> writeResults = new ArrayList<>();
         if (CollectionUtil.isEmpty(templates) || CollectionUtil.isEmpty(tableInfoList)) {
-            return;
+            return writeResults;
         }
-        // 处理模板，注入全局变量（克隆一份，防止篡改）
+        // 嵌套生成结果收集器：模板内 $generateService.run 产生的写入结果逐层汇入此处，末尾并入总清单
         templates = CloneUtils.cloneByJson(templates, new TypeReference<ArrayList<Template>>() {
         });
         TemplateUtils.addGlobalConfig(templates);
+        // 嵌套生成结果收集器：模板内 $generateService.run 产生的写入结果逐层汇入此处，末尾并入总清单
+        List<FileWriteResult> nestedResults = new ArrayList<>();
         // 生成代码
         for (TableInfo tableInfo : tableInfoList) {
             // 表名去除前缀
@@ -148,11 +174,13 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
             param.put("tableInfo", tableInfo);
             // 设置模型路径与导包列表
             setModulePathAndImportList(param, tableInfo);
-            // 设置额外代码生成服务
-            param.put("generateService", new ExtraCodeGenerateUtils(this, tableInfo, generateOptions));
+            // 设置额外代码生成服务（嵌套 $generateService.run 按 generateOptions.templateGroupName 指定的组查找模板，
+            // 并收集嵌套写入结果随主结果一并返回）
+            param.put("generateService", new ExtraCodeGenerateUtils(this, tableInfo, generateOptions, nestedResults));
             for (Template template : templates) {
                 Callback callback = new Callback();
-                callback.setWriteFile(true);
+                // 预览模式不写盘（嵌套 $generateService.run 的预览渲染同样不落盘）
+                callback.setWriteFile(!Boolean.TRUE.equals(generateOptions.getPreviewMode()));
                 callback.setReformat(generateOptions.getReFormat());
                 // 默认名称
                 callback.setFileName(tableInfo.getName() + "Default.java");
@@ -170,9 +198,24 @@ public class CodeGenerateServiceImpl implements CodeGenerateService {
                     path = project.getBasePath() + path.substring(1);
                 }
                 callback.setSavePath(path);
-                new SaveFile(project, code, callback, generateOptions).write();
+                SaveResult saveResult = new SaveFile(project, code, callback, generateOptions).write();
+                FileWriteResult writeResult = new FileWriteResult();
+                writeResult.setTableName(tableInfo.getObj() == null ? tableInfo.getName() : tableInfo.getObj().getName());
+                writeResult.setTemplate(template.getName());
+                writeResult.setClassName(tableInfo.getName());
+                writeResult.setFileName(callback.getFileName());
+                writeResult.setSavePath(callback.getSavePath());
+                writeResult.setResult(saveResult);
+                writeResult.setCode(code);
+                // 预览模式（渲染不写盘）或实际写盘时纳入清单
+                if (Boolean.TRUE.equals(generateOptions.getPreviewMode()) || Boolean.TRUE.equals(callback.getWriteFile())) {
+                    writeResults.add(writeResult);
+                }
             }
         }
+        // 汇总嵌套生成（$generateService.run）的写入结果
+        writeResults.addAll(nestedResults);
+        return writeResults;
     }
 
     /**

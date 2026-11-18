@@ -119,10 +119,16 @@ public class SaveFile {
 
     /**
      * 通过IDEA自带的Psi文件方式写入
+     *
+     * @return 真实写入结果
      */
-    public void write() {
+    public SaveResult write() {
+        // 预览模式硬闸：无论 callback 如何被模板改写（如 $callback.setWriteFile(true)），一律不落盘
+        if (Boolean.TRUE.equals(generateOptions.getPreviewMode())) {
+            return SaveResult.SKIPPED;
+        }
         if (!Boolean.TRUE.equals(callback.getWriteFile())) {
-            return;
+            return SaveResult.SKIPPED;
         }
         // 判断目录是否存在
         VirtualFile baseDir = ProjectUtils.getBaseDir(project);
@@ -154,37 +160,38 @@ public class SaveFile {
         // 提示创建目录
         VirtualFile directory = titleCreateDir(saveDir, baseDir, savePath);
         if (directory == null) {
-            return;
+            return SaveResult.FAILED;
         }
         VirtualFile psiFile = directory.findChild(callback.getFileName());
         // 保存或覆盖
-        saveOrReplaceFile(psiFile, directory);
+        return saveOrReplaceFile(psiFile, directory);
     }
 
     /**
      * 提示创建目录
+     * <p>
+     * 目录缺失时一律自动创建（不再弹窗确认，UI 与 MCP 行为统一）。
      *
-     * @param saveDir 保存路径
-     * @return 是否放弃执行
+     * @param saveDir  保存路径
+     * @param baseDir  项目基本目录（项目外文件为 null）
+     * @param savePath 保存路径
+     * @return 目录（自动创建失败时返回 null）
      */
     private VirtualFile titleCreateDir(VirtualFile saveDir, VirtualFile baseDir, String savePath) {
         if (saveDir != null) {
             return saveDir;
         }
-        // 尝试创建目录
-        String msg = String.format("Directory %s Not Found, Confirm Create?", callback.getSavePath());
-        if (generateOptions.getTitleSure()) {
-            saveDir = fileUtils.createChildDirectory(project, baseDir, savePath);
-            return saveDir;
-        } else if (generateOptions.getTitleRefuse()) {
-            return null;
-        } else {
-            if (MessageDialogUtils.yesNo(project, msg)) {
-                saveDir = fileUtils.createChildDirectory(project, baseDir, savePath);
-                return saveDir;
-            }
-        }
-        return null;
+        // 目录缺失一律自动创建，不再弹窗确认（静默模式下创建失败也只记日志不弹窗）
+        return fileUtils.createChildDirectory(project, baseDir, savePath, isSilentMode());
+    }
+
+    /**
+     * 是否静默模式（agent/MCP 无人值守场景：失败不弹窗）
+     *
+     * @return 是否静默
+     */
+    private boolean isSilentMode() {
+        return Boolean.TRUE.equals(generateOptions.getSilentMode());
     }
 
     /**
@@ -192,32 +199,40 @@ public class SaveFile {
      *
      * @param file      文件
      * @param directory 目录
+     * @return 真实写入结果
      */
-    private void saveOrReplaceFile(VirtualFile file, VirtualFile directory) {
+    private SaveResult saveOrReplaceFile(VirtualFile file, VirtualFile directory) {
         PsiDocumentManager psiDocumentManager = PsiDocumentManager.getInstance(project);
         Document document;
+        SaveResult result;
         // 文件不存在直接创建
         if (file == null) {
-            file = fileUtils.createChildFile(project, directory, callback.getFileName());
+            file = fileUtils.createChildFile(project, directory, callback.getFileName(), isSilentMode());
             if (file == null) {
-                return;
+                return SaveResult.FAILED;
             }
             document = coverFile(file);
+            result = SaveResult.CREATED;
         } else {
             // 提示覆盖文件
             if (generateOptions.getTitleSure()) {
                 // 默认选是
                 document = coverFile(file);
+                result = SaveResult.OVERWRITTEN;
             } else if (generateOptions.getTitleRefuse()) {
                 // 默认选否
-                return;
+                return SaveResult.SKIPPED;
+            } else if (isSilentMode()) {
+                // 静默模式（agent/MCP 无人值守）兜底：绝不弹窗，未指定覆盖策略时默认跳过已存在文件
+                return SaveResult.SKIPPED;
             } else {
                 String msg = String.format("File %s Exists, Select Operate Mode?", file.getPath());
-                int result = MessageDialogUtils.yesNoCancel(project, msg, "Convert", "Compare", "Cancel");
-                switch (result) {
+                int dialogResult = MessageDialogUtils.yesNoCancel(project, msg, "Convert", "Compare", "Cancel");
+                switch (dialogResult) {
                     case Messages.YES:
                         // 覆盖文件
                         document = coverFile(file);
+                        result = SaveResult.OVERWRITTEN;
                         break;
                     case Messages.NO:
                         // 对比代码时也格式化代码
@@ -237,10 +252,10 @@ public class SaveFile {
                         }
                         FileType fileType = FileTypeManager.getInstance().getFileTypeByFileName(callback.getFileName());
                         CompareFileUtils.showCompareWindow(project, file, new LightVirtualFile(callback.getFileName(), fileType, newText));
-                        return;
+                        return SaveResult.SKIPPED;
                     case Messages.CANCEL:
                     default:
-                        return;
+                        return SaveResult.SKIPPED;
                 }
             }
         }
@@ -252,6 +267,7 @@ public class SaveFile {
         if (document != null) {
             psiDocumentManager.commitDocument(document);
         }
+        return result;
     }
 
     private String getFileText(VirtualFile file) {

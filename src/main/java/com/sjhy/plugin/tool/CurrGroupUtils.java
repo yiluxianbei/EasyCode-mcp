@@ -6,6 +6,7 @@ import com.sjhy.plugin.entity.GlobalConfigGroup;
 import com.sjhy.plugin.entity.TemplateGroup;
 import com.sjhy.plugin.entity.TypeMapperGroup;
 import com.sjhy.plugin.service.SettingsStorageService;
+import java.util.Map;
 
 /**
  * 当前分组配置获取工具
@@ -31,6 +32,24 @@ public final class CurrGroupUtils {
         SettingsStorageDTO settingsStorage = SettingsStorageService.getSettingsStorage();
         String groupName = settingsStorage.getCurrTemplateGroupName();
         return settingsStorage.getTemplateGroupMap().get(groupName);
+    }
+
+    /**
+     * 按名称获取模板组对象
+     *
+     * @param groupName 模板组名称
+     * @return 模板组对象（名称为空、配置缺失或分组不存在时返回 null）
+     */
+    public static TemplateGroup getTemplateGroup(String groupName) {
+        if (StringUtils.isEmpty(groupName)) {
+            return null;
+        }
+        SettingsStorageDTO settingsStorage = SettingsStorageService.getSettingsStorage();
+        Map<String, TemplateGroup> templateGroupMap = settingsStorage.getTemplateGroupMap();
+        if (templateGroupMap == null) {
+            return null;
+        }
+        return templateGroupMap.get(groupName);
     }
 
 

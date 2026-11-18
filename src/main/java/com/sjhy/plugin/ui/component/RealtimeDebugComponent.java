@@ -32,6 +32,8 @@ import com.sjhy.plugin.tool.ProjectUtils;
 import com.sjhy.plugin.ui.base.EditorSettingsInit;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
+import com.intellij.database.util.DasUtil;
+import com.sjhy.plugin.tool.SystemSchemaUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -155,12 +157,30 @@ public class RealtimeDebugComponent {
         this.allTables = new HashMap<>(16);
         for (DbDataSource dataSource : dataSources) {
             for (DasTable table : getTables(dataSource)) {
+                // 过滤系统 schema（MySQL/PostgreSQL），与 list_tables 保持一致（通用工具，不依赖 mcp 代码）
+                if (SystemSchemaUtils.isSystemSchema(schemaOf(table))) {
+                    continue;
+                }
                 this.allTables.put(table.toString(), table);
             }
         }
         this.comboBox.removeAllItems();
         for (String tableName : getAllTableNameBySort()) {
             this.comboBox.addItem(tableName);
+        }
+    }
+
+    /**
+     * 读取表所属 schema 名（取不到返回 null，交由 isSystemSchema 判定）
+     *
+     * @param table 表对象
+     * @return schema 名
+     */
+    private String schemaOf(DasTable table) {
+        try {
+            return DasUtil.getSchema(table);
+        } catch (Exception e) {
+            return null;
         }
     }
 

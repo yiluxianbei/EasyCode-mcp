@@ -24,6 +24,10 @@ import com.sjhy.plugin.tool.ProjectUtils;
 import com.sjhy.plugin.tool.StringUtils;
 import com.sjhy.plugin.ui.component.TemplateSelectComponent;
 import org.jetbrains.annotations.Nullable;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationDisplayType;
+import com.intellij.notification.NotificationGroup;
+import com.intellij.notification.NotificationType;
 
 import javax.swing.*;
 import java.awt.*;
@@ -34,6 +38,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * 选择保存路径
@@ -43,6 +48,15 @@ import java.util.List;
  * @since 2018/07/17 13:10
  */
 public class SelectSavePath extends DialogWrapper {
+    /**
+     * 生成告警通知组（使用兼容构造器，避免老 IDE 不支持 NotificationGroupManager）
+     */
+    private static final NotificationGroup NOTIFICATION_GROUP =
+            new NotificationGroup("EasyCode", NotificationDisplayType.BALLOON, true);
+    /**
+     * 通知中最多展示的告警条数
+     */
+    private static final int MAX_WARNING_DISPLAY = 5;
     /**
      * 主面板
      */
@@ -314,7 +328,39 @@ public class SelectSavePath extends DialogWrapper {
         tableInfoService.saveTableInfo(tableInfo);
 
         // 生成代码
-        codeGenerateService.generate(selectTemplateList, getGenerateOptions());
+        GenerateOptions generateOptions = getGenerateOptions();
+        codeGenerateService.generate(selectTemplateList, generateOptions);
+        // 生成后汇总告警（如嵌套模板解析失败），避免静默少文件
+        showWarnings(generateOptions);
+    }
+
+    /**
+     * 展示生成告警（嵌套模板解析失败等）
+     *
+     * @param generateOptions 生成选项
+     */
+    private void showWarnings(GenerateOptions generateOptions) {
+        if (generateOptions == null) {
+            return;
+        }
+        List<String> warnings = generateOptions.getWarnings();
+        if (warnings == null || warnings.isEmpty()) {
+            return;
+        }
+        StringBuilder content = new StringBuilder();
+        int displayCount = Math.min(warnings.size(), MAX_WARNING_DISPLAY);
+        for (int i = 0; i < displayCount; i++) {
+            if (i > 0) {
+                content.append("\n");
+            }
+            content.append(warnings.get(i));
+        }
+        if (warnings.size() > displayCount) {
+            content.append("\n... 共 ").append(warnings.size()).append(" 条，详见 idea.log");
+        }
+        Notification notification = NOTIFICATION_GROUP.createNotification(
+                "EasyCode 生成告警", content.toString(), NotificationType.WARNING);
+        notification.notify(project);
     }
 
     /**
@@ -343,6 +389,9 @@ public class SelectSavePath extends DialogWrapper {
                 .titleSure(titleSureCheckBox.isSelected())
                 .titleRefuse(titleRefuseCheckBox.isSelected())
                 .unifiedConfig(unifiedConfigCheckBox.isSelected())
+                // 本次生成使用的模板分组：模板内嵌套 $generateService.run 按此分组解析
+                .templateGroupName(this.templateSelectComponent.getselectedGroupName())
+                .warnings(new ArrayList<>())
                 .build();
     }
 

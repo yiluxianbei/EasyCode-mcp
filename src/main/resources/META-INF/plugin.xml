@@ -24,10 +24,16 @@
       <ul>
         <li>1.Fix the incorrect configuration information of some user prompt tables</li>
         <li>2.Compatible with idea 2024.3</li>
+        <li>3.Fix "'module' is requested on EDT" reported by ProjectViewPopup (ActionUpdateThread)</li>
+        <li>4.Avoid DataContext.getData() in update(), keep module check via ProjectFileIndex</li>
+        <li>5.Fix velocity log config removed in velocity 2.x</li>
       </ul>
       <ul>
         <li>1.修复部分用户提示表配置信息不正确问题</li>
         <li>2.兼容idea 2024.3</li>
+        <li>3.修复右键菜单提示 "'module' is requested on EDT" 的问题（ActionUpdateThread）</li>
+        <li>4.update() 不再使用 DataContext.getData() 绕过数据快照，模块判断改用 ProjectFileIndex</li>
+        <li>5.修复 velocity 2.x 移除了日志配置项导致的兼容问题</li>
       </ul>
       <p>1.2.8-java.RELEASE</p>
       <ul>
@@ -269,7 +275,7 @@
     ]]></change-notes>
 
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-    <idea-version since-build="171.3780.107"/>
+    <idea-version since-build="233.0"/>
 
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
          on how to target different products -->

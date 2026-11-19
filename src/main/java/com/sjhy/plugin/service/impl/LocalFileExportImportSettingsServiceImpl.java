@@ -60,9 +60,9 @@ public class LocalFileExportImportSettingsServiceImpl implements ExportImportSet
                     FileDocumentManager.getInstance().reloadFiles(virtualFile);
                 }
 
-                // 发起通知
+                // 发起通知（SYSTEM_MESSAGES_GROUP_ID 在新版平台已标记为待删除，直接用等值字符串）
                 Notification notification = new Notification(
-                        Notifications.SYSTEM_MESSAGES_GROUP_ID,
+                        "System Messages",
                         "Easy code notify",
                         "Easy code config file export to",
                         NotificationType.INFORMATION);

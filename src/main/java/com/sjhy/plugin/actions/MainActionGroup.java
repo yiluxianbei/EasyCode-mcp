@@ -27,6 +27,20 @@ public class MainActionGroup extends ActionGroup {
      */
     private final CacheDataUtils cacheDataUtils = CacheDataUtils.getInstance();
 
+    /**
+     * 菜单动作缓存，避免在 update（BGT）阶段反复创建/注册动作
+     */
+    private volatile AnAction[] menuList;
+
+    /**
+     * update() 中需要读取 PSI（数据库表）等相关信息，必须声明在后台线程执行。
+     * 否则 2024.2+ 平台会在 EDT 上请求 PSI_ELEMENT 等由 DataProvider rules 提供的键时报错。
+     */
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.BGT;
+    }
+
 
     /**
      * 根据右键在不同的选项上展示不同的子菜单
@@ -81,6 +95,25 @@ public class MainActionGroup extends ActionGroup {
      * @return 子菜单数组
      */
     private AnAction[] getMenuList() {
+        AnAction[] actions = menuList;
+        if (actions == null) {
+            synchronized (this) {
+                actions = menuList;
+                if (actions == null) {
+                    actions = createMenuList();
+                    menuList = actions;
+                }
+            }
+        }
+        return actions;
+    }
+
+    /**
+     * 创建菜单动作（仅在首次调用时执行）
+     *
+     * @return 子菜单数组
+     */
+    private AnAction[] createMenuList() {
         String mainActionId = "com.sjhy.easy.code.action.generate";
         String configActionId = "com.sjhy.easy.code.action.config";
         ActionManager actionManager = ActionManager.getInstance();

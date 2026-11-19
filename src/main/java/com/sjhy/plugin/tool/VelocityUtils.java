@@ -2,8 +2,8 @@ package com.sjhy.plugin.tool;
 
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
-import org.apache.velocity.runtime.RuntimeConstants;
 
+import java.lang.reflect.Field;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Map;
@@ -26,8 +26,15 @@ public class VelocityUtils {
         // 设置初始化配置
         INIT_PROP = new Properties();
         // 修复部分用户的velocity日志记录无权访问velocity.log文件问题
-        INIT_PROP.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.Log4JLogChute");
-        INIT_PROP.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
+        // velocity 1.x 提供了 RUNTIME_LOG_LOGSYSTEM_CLASS 常量，2.x 已移除，故通过反射兼容两种版本
+        try {
+            Field field = Class.forName("org.apache.velocity.runtime.RuntimeConstants")
+                    .getField("RUNTIME_LOG_LOGSYSTEM_CLASS");
+            INIT_PROP.setProperty((String) field.get(null), "org.apache.velocity.runtime.log.Log4JLogChute");
+            INIT_PROP.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
+        } catch (Throwable ignored) {
+            // velocity 2.x 及以上不再支持该配置项，忽略即可
+        }
     }
 
     /**

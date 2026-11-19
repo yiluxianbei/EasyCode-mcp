@@ -37,19 +37,19 @@ public class CacheDataUtils {
     /**
      * 当前选中的表
      */
-    private DbTable selectDbTable;
+    private volatile DbTable selectDbTable;
     /**
      * 所有选中的表
      */
-    private List<DbTable> dbTableList;
+    private volatile List<DbTable> dbTableList;
 
     /**
      * 选中的类
      */
-    private PsiClass selectPsiClass;
+    private volatile PsiClass selectPsiClass;
 
     /**
      * 所有选中的表
      */
-    private List<PsiClass> psiClassList;
+    private volatile List<PsiClass> psiClassList;
 }

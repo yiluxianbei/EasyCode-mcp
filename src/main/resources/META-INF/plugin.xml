@@ -304,7 +304,11 @@
         <projectService serviceImplementation="com.sjhy.plugin.service.impl.TableInfoSettingsServiceImpl"/>
         <projectService serviceInterface="com.sjhy.plugin.service.CodeGenerateService" serviceImplementation="com.sjhy.plugin.service.impl.CodeGenerateServiceImpl"/>
         <!--系统设置面板-->
-        <applicationConfigurable dynamic="true" instance="com.sjhy.plugin.ui.MainSettingForm"/>
+        <!--系统设置面板：新版平台要求 EP 中直接提供 displayName（或 key），
+            否则打开 Settings 时为了排序/搜索需要加载类，会抛 PluginException -->
+        <applicationConfigurable dynamic="true" instance="com.sjhy.plugin.ui.MainSettingForm"
+                                id="com.sjhy.plugin.easycode.settings"
+                                displayName="EasyCode"/>
         <!--MCP 服务（内嵌 HTTP MCP 端点，应用级单例，随 IDE 启动）-->
         <applicationService serviceImplementation="com.sjhy.plugin.mcp.McpServerService"/>
     </extensions>
